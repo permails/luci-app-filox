@@ -450,7 +450,7 @@ return view.extend({
 			E('div', {
 				'class': 'filox-header'
 			}, [
-				E('h2', {}, _('File Path: ')),
+				E('h2', {}, _('File Path:') + ' '),
 				E('input', {
 					'type': 'text',
 					'id': 'path-input', 'class': 'cbi-input-text',
