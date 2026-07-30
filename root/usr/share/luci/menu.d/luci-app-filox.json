@@ -1,6 +1,6 @@
 {
 	"admin/system/filox": {
-		"title": "File Manager",
+		"title": "Filox Explorer",
 		"order": 80,
 		"action": {
 			"type": "view",
