@@ -244,8 +244,8 @@ msgstr "文件 \"%s\" 上传成功。"
 
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:699
 #: applications/luci-app-filox/root/usr/share/luci/menu.d/luci-app-filox.json:3
-msgid "Filox Explorer"
-msgstr "Filox 文件管家"
+msgid "File Manager"
+msgstr "文件管理器"
 
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:665
 msgid "File Manager:"
