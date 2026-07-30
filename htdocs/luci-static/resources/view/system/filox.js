@@ -439,6 +439,21 @@ return view.extend({
 		});
 	},
 
+	// Helper to determine if a path is restricted from destructive operations
+	isPathRestricted(path, action) {
+		const ro_dirs = ['/bin', '/sbin', '/usr', '/lib', '/rom', '/boot', '/sys', '/proc', '/dev', '/overlay'];
+		const sys_dirs = ['/etc']; // allow edit, but no delete/rename/upload/mkdir
+		
+		let isRO = ro_dirs.some(dir => path === dir || path.startsWith(dir + '/'));
+		let isSys = sys_dirs.some(dir => path === dir || path.startsWith(dir + '/'));
+
+		if (action === 'edit') {
+			return isRO;
+		}
+		
+		return isRO || isSys;
+	},
+
 	// Method to render the interface
 	render(data) {
 		const self = this;
@@ -580,14 +595,17 @@ return view.extend({
 						'class': 'cbi-page-actions'
 					}, [
 						E('button', {
+							'id': 'upload-file-button',
 							'class': 'cbi-button cbi-button-action',
 							'click': this.handleUploadClick.bind(this)
 						}, _('Upload File')),
 						E('button', {
+							'id': 'create-folder-button',
 							'class': 'cbi-button cbi-button-action',
 							'click': this.handleMakeDirectoryClick.bind(this)
 						}, _('Create Folder')),
 						E('button', {
+							'id': 'create-file-button',
 							'class': 'cbi-button cbi-button-action',
 							'click': this.handleCreateFileClick.bind(this)
 						}, _('Create File')),
@@ -1076,12 +1094,32 @@ return view.extend({
 		});
 	},
 
+	// Update toolbar restrictions based on current path
+	updateToolbarRestrictions(path) {
+		const isRestricted = this.isPathRestricted(path, 'modify');
+		const uploadBtn = document.getElementById('upload-file-button');
+		const mkdirBtn = document.getElementById('create-folder-button');
+		const mkfileBtn = document.getElementById('create-file-button');
+		const deleteSelBtn = document.getElementById('delete-selected-button');
+		
+		[uploadBtn, mkdirBtn, mkfileBtn].forEach(btn => {
+			if (btn) btn.disabled = isRestricted;
+		});
+		
+		if (isRestricted && deleteSelBtn) {
+			deleteSelBtn.disabled = true;
+		} else {
+			this.updateDeleteSelectedButton();
+		}
+	},
+
 	// Function to load the file list
 	loadFileList(path) {
 		const self = this;
 		selectedItems.clear();
 
 		return getFileList(path).then(files => {
+			self.updateToolbarRestrictions(path);
 			// 1. Get column order dynamically from grid header
 			const columns = ['cb', ...Array.from(
 				document.querySelectorAll('#file-table .file-grid-header .file-cell[data-field]')
@@ -1177,23 +1215,27 @@ return view.extend({
 					}, _('Download')));
 				}
 
-				actions.push(E('button', {
-					class: 'btn cbi-button custom-rename-btn',
-					title: _('Rename/Properties'),
-					click: () => self.handleEditFile(fullPath, file)
-				}, _('Rename')));
+				const isRestricted = self.isPathRestricted(fullPath, 'modify');
 
-				actions.push(E('button', {
-					class: 'cbi-button cbi-button-action',
-					title: _('Duplicate'),
-					click: () => self.handleDuplicateFile(fullPath, file)
-				}, _('Copy')));
+				if (!isRestricted) {
+					actions.push(E('button', {
+						class: 'btn cbi-button custom-rename-btn',
+						title: _('Rename/Properties'),
+						click: () => self.handleEditFile(fullPath, file)
+					}, _('Rename')));
 
-				actions.push(E('button', {
-					class: 'cbi-button cbi-button-remove',
-					title: _('Delete'),
-					click: () => self.handleDeleteFile(fullPath, file)
-				}, _('Delete')));
+					actions.push(E('button', {
+						class: 'cbi-button cbi-button-action',
+						title: _('Duplicate'),
+						click: () => self.handleDuplicateFile(fullPath, file)
+					}, _('Copy')));
+
+					actions.push(E('button', {
+						class: 'cbi-button cbi-button-remove',
+						title: _('Delete'),
+						click: () => self.handleDeleteFile(fullPath, file)
+					}, _('Delete')));
+				}
 
 				//
 				// 3. Build `<td>` dynamically based on column definitions
@@ -1889,11 +1931,14 @@ return view.extend({
 				'style': 'display: none;' // Initially hidden
 			}, []);
 
+			const isEditRestricted = self.isPathRestricted(filePath, 'edit');
+
 			// Create textarea for text editing
 			const editorTextarea = E('textarea', {
 				'wrap': 'off',
 				'id': 'editor-textarea',
-				'style': 'flex: 1; resize: none; border: none; padding: 0; margin: 0; overflow: auto;'
+				'style': 'flex: 1; resize: none; border: none; padding: 0; margin: 0; overflow: auto;',
+				'readonly': isEditRestricted ? true : undefined
 			}, [self.fileContent || '']);
 
 			// Append line numbers and textarea to the editor content container
@@ -1911,6 +1956,7 @@ return view.extend({
 			actionButtons = [
 				E('button', {
 					'class': 'cbi-button cbi-button-save custom-save-button',
+					'disabled': isEditRestricted ? true : undefined,
 					'click'() {
 						self.handleSaveFile(filePath);
 					}
@@ -1949,10 +1995,13 @@ return view.extend({
 			// Load data into the HexEditor
 			self.hexEditorInstance.setData(self.fileData); // self.fileData is a Uint8Array
 
+			const isEditRestricted = self.isPathRestricted(filePath, 'edit');
+			
 			// Define action buttons specific to Hex Mode
 			actionButtons = [
 				E('button', {
 					'class': 'cbi-button cbi-button-save custom-save-button',
+					'disabled': isEditRestricted ? true : undefined,
 					'click'() {
 						self.handleSaveFile(filePath);
 					}
