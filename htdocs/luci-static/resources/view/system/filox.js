@@ -450,7 +450,7 @@ return view.extend({
 			E('div', {
 				'class': 'filox-header'
 			}, [
-				E('h2', {}, _('Filox: ')),
+				E('h2', {}, _('File Path: ')),
 				E('input', {
 					'type': 'text',
 					'id': 'path-input', 'class': 'cbi-input-text',
@@ -474,19 +474,15 @@ return view.extend({
 				'class': 'cbi-tabcontainer',
 				'id': 'tab-group'
 			}, [
-				E('ul', {
-					'class': 'cbi-tabmenu'
-				}, [
-					E('li', {
-						'class': 'cbi-tab cbi-tab-active',
-						'id': 'tab-filox'
-					}, [
-						E('a', {
+					E('ul', { 'class': 'cbi-tabmenu' }, [
+						E('li', {
+							'class': 'cbi-tab cbi-tab-active',
+							'id': 'tab-filox'
+						}, E('a', {
 							'href': '#',
 							'click': this.switchToTab.bind(this, 'filox')
-						}, _('Filox'))
-					]),
-					E('li', {
+						}, _('File Tree'))),
+						E('li', {
 						'class': 'cbi-tab',
 						'id': 'tab-editor'
 					}, [
