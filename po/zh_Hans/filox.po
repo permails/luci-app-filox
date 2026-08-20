@@ -113,7 +113,7 @@ msgstr "将文件拖放到此处进行上传"
 
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:1646
 msgid "Duplicate"
-msgstr "重复"
+msgstr "创建副本"
 
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:1640
 msgid "Edit properties"
@@ -121,12 +121,12 @@ msgstr "编辑属性"
 
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:2335
 msgid "Editing %s: \"%s\""
-msgstr "编辑中%s：\"%s\""
+msgstr "正在编辑 %s：\"%s\""
 
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:2603
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:2607
 msgid "Editing:"
-msgstr "编辑中："
+msgstr "正在编辑："
 
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:708
 msgid "Editor"
@@ -499,3 +499,31 @@ msgstr "文件路径："
 
 msgid "File Tree"
 msgstr "文件树"
+
+msgid "Rename"
+msgstr "重命名"
+
+msgid "Copy"
+msgstr "复制"
+
+msgid "Rename/Properties"
+msgstr "重命名/属性"
+
+msgid "Parent Directory"
+msgstr "父目录"
+
+msgid "Checking available disk space..."
+msgstr "正在检查可用磁盘空间..."
+
+msgid "Failed to check disk space: %s"
+msgstr "检查磁盘空间失败：%s"
+
+msgid "Insufficient disk space in \"%s\": Required %s, Available %s."
+msgstr "\"%s\" 磁盘空间不足：需要 %s，可用 %s。"
+
+msgid "Upload verification failed for \"%s\": expected %s, got %s"
+msgstr "文件 \"%s\" 上传校验失败：预期大小 %s，实际大小 %s"
+
+msgid "Upload verification failed: file does not exist on server"
+msgstr "上传校验失败：服务器上不存在该文件"
+

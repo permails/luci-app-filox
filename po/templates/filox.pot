@@ -456,3 +456,37 @@ msgstr ""
 #: applications/luci-app-filox/htdocs/luci-static/resources/view/system/filox.js:2389
 msgid "item"
 msgstr ""
+
+msgid "File Path:"
+msgstr ""
+
+msgid "File Tree"
+msgstr ""
+
+msgid "Rename"
+msgstr ""
+
+msgid "Copy"
+msgstr ""
+
+msgid "Rename/Properties"
+msgstr ""
+
+msgid "Parent Directory"
+msgstr ""
+
+msgid "Checking available disk space..."
+msgstr ""
+
+msgid "Failed to check disk space: %s"
+msgstr ""
+
+msgid "Insufficient disk space in \"%s\": Required %s, Available %s."
+msgstr ""
+
+msgid "Upload verification failed for \"%s\": expected %s, got %s"
+msgstr ""
+
+msgid "Upload verification failed: file does not exist on server"
+msgstr ""
+

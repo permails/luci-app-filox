@@ -24,12 +24,38 @@ const fileTypes = {
 	'symlink' : _('Symlink'),
 }
 
-function pop(a, message, severity) {
-	ui.addNotification(a, message, severity)
+// OpenWrt 25 Center Modal status popup (3-second auto-dismiss with dimmed overlay)
+let modalTimeoutHandle = null;
+
+function showModalMessage(type, message, timeout = 3000) {
+	if (modalTimeoutHandle) {
+		clearTimeout(modalTimeoutHandle);
+		modalTimeoutHandle = null;
+	}
+
+	const dlg = ui.showModal('', '');
+	dlg.setAttribute('class', 'modal filox-status-modal');
+	const typeClass = (type === 'error') ? 'danger' : (type || 'notice');
+	dlg.classList.add(typeClass);
+
+	const content = (message instanceof Node) ? message : E('p', {}, String(message || ''));
+	dom.content(dlg, content);
+
+	if (timeout > 0) {
+		modalTimeoutHandle = setTimeout(() => {
+			ui.hideModal();
+			modalTimeoutHandle = null;
+		}, timeout);
+	}
+	return dlg;
 }
 
-function popTimeout(a, message, timeout, severity) {
-	ui.addTimeLimitedNotification(a, message, timeout, severity)
+function pop(title, message, severity) {
+	return showModalMessage(severity || 'danger', message || title, 3000);
+}
+
+function popTimeout(title, message, timeout, severity) {
+	return showModalMessage(severity || 'notice', message || title, timeout || 3000);
 }
 
 // Initialize global variables
@@ -283,27 +309,80 @@ const cssContent = `
 	display: flex;
 	gap: 4px;
 	justify-content: flex-end;
+	align-items: center;
 	flex-wrap: nowrap;
 }
+.action-button-group .btn,
 .action-button-group .cbi-button {
-	padding: 2px 8px;
+	margin: 0;
+	padding: 2px 6px;
 	font-size: 12px;
 	white-space: nowrap;
 }
 
-/* Custom Orange Button */
-.custom-rename-btn {
-	color: #ff9800 !important;
-	border-color: #ff9800 !important;
-}
-.custom-rename-btn:hover {
-	background-color: rgba(255, 152, 0, 0.1) !important;
+/* Directory / file name links */
+.directory-link { font-weight: bold; }
+.file-link      { color: inherit; text-decoration: none; }
+.symlink-link   { font-style: italic; }
+
+/* === OpenWrt-style Status Modal Dialog === */
+#modal_overlay > .modal.filox-status-modal {
+	background-color: var(--background-color-low, #f8f9fa) !important;
+	border: 1px solid var(--border-color-medium, #e2e8f0) !important;
+	border-radius: 8px !important;
+	box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16) !important;
+	padding: 16px 28px !important;
+	min-width: 280px !important;
+	max-width: 480px !important;
+	text-align: center !important;
 }
 
-/* Directory / file name links */
-.directory-link { font-weight: 600; }
-.file-link      { color: inherit; }
-.symlink-link   { color: #2a7; }
+#modal_overlay > .modal.filox-status-modal p {
+	margin: 0 !important;
+	font-size: 14px !important;
+	font-weight: 500 !important;
+	line-height: 1.5 !important;
+}
+
+/* Error/Danger: OpenWrt design language red text */
+#modal_overlay > .modal.filox-status-modal.danger p,
+#modal_overlay > .modal.filox-status-modal.danger {
+	color: #dc3545 !important;
+}
+
+/* Warning: OpenWrt design language amber text */
+#modal_overlay > .modal.filox-status-modal.warning p,
+#modal_overlay > .modal.filox-status-modal.warning {
+	color: #d97706 !important;
+}
+
+/* Notice/Info: OpenWrt standard text */
+#modal_overlay > .modal.filox-status-modal.notice p,
+#modal_overlay > .modal.filox-status-modal.info p,
+#modal_overlay > .modal.filox-status-modal.notice,
+#modal_overlay > .modal.filox-status-modal.info {
+	color: var(--text-color-high, #212529) !important;
+}
+
+/* Dark mode overrides */
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal {
+	background-color: #24292e !important;
+	border-color: #444c56 !important;
+}
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.danger p,
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.danger {
+	color: #f85149 !important;
+}
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.warning p,
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.warning {
+	color: #e3b341 !important;
+}
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.notice p,
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.info p,
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.notice,
+[data-darkmode="true"] #modal_overlay > .modal.filox-status-modal.info {
+	color: #c9d1d9 !important;
+}
 
 /* === Page-level layout === */
 #filox-container {
@@ -832,6 +911,40 @@ return view.extend({
 		fileInput.click();
 	},
 
+	// Helper to get available disk space on a given path in bytes
+	getAvailableDiskSpace(path) {
+		return fs.exec('df', ['-k', path || '/']).then((res) => {
+			if (res.code !== 0 || !res.stdout) {
+				return null;
+			}
+			const lines = res.stdout.trim().split('\n');
+			if (lines.length >= 2) {
+				const parts = lines[1].trim().split(/\s+/);
+				if (parts.length >= 4) {
+					const availKb = parseInt(parts[3], 10);
+					if (!isNaN(availKb)) {
+						return availKb * 1024;
+					}
+				}
+			}
+			return null;
+		}).catch(() => null);
+	},
+
+	// Helper to format bytes into human readable string
+	formatSizeString(bytes) {
+		if (bytes === null || bytes === undefined || isNaN(bytes)) return '-';
+		if (bytes === 0) return '0 B';
+		const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+		let idx = 0;
+		let val = bytes;
+		while (val >= 1024 && idx < units.length - 1) {
+			val /= 1024;
+			idx++;
+		}
+		return (idx === 0 ? val : val.toFixed(2)) + ' ' + units[idx];
+	},
+
 	uploadFiles(files) {
 		const self = this;
 		const directoryPath = currentPath;
@@ -840,60 +953,98 @@ return view.extend({
 		const totalFiles = files.length;
 		let uploadedFiles = 0;
 
-		function uploadNextFile(index) {
-			if (index >= totalFiles) {
-				self.loadFileList(currentPath).then(() => {
-					
-				});
+		// Calculate total upload size
+		let totalSize = 0;
+		for (let i = 0; i < files.length; i++) {
+			totalSize += files[i].size || 0;
+		}
+
+		if (statusInfo) {
+			statusInfo.textContent = _('Checking available disk space...');
+		}
+
+		self.getAvailableDiskSpace(directoryPath).then((availBytes) => {
+			if (availBytes !== null && totalSize > availBytes) {
+				const reqStr = self.formatSizeString(totalSize);
+				const availStr = self.formatSizeString(availBytes);
+				const errMsg = _('Insufficient disk space in "%s": Required %s, Available %s.').format(directoryPath, reqStr, availStr);
+				if (statusInfo) {
+					statusInfo.textContent = errMsg;
+				}
+				pop(null, E('p', errMsg), 'error');
 				return;
 			}
 
-			const file = files[index];
-			const fullFilePath = joinPath(directoryPath, file.name);
-			if (statusInfo) {
-				statusInfo.textContent = _('Uploading: "%s"...').format(file.name);
-			}
-			if (statusProgress) {
-				statusProgress.innerHTML = '';
-				const progressBarContainer = E('div', {
-					'class': 'cbi-progressbar',
-					'title': '0%'
-				}, [E('div', {
-					'style': 'width:0%'
-				})]);
-				statusProgress.appendChild(progressBarContainer);
-			}
+			function uploadNextFile(index) {
+				if (index >= totalFiles) {
+					self.loadFileList(currentPath).then(() => {
+						
+					});
+					return;
+				}
 
-			uploadFile(fullFilePath, file, (percent) => {
+				const file = files[index];
+				const fullFilePath = joinPath(directoryPath, file.name);
+				if (statusInfo) {
+					statusInfo.textContent = _('Uploading: "%s"...').format(file.name);
+				}
 				if (statusProgress) {
-					const progressBar = statusProgress.querySelector('.cbi-progressbar div');
-					if (progressBar) {
-						progressBar.style.width = percent.toFixed(2) + '%';
-						statusProgress.querySelector('.cbi-progressbar').setAttribute('title', percent.toFixed(2) + '%');
+					statusProgress.innerHTML = '';
+					const progressBarContainer = E('div', {
+						'class': 'cbi-progressbar',
+						'title': '0%'
+					}, [E('div', {
+						'style': 'width:0%'
+					})]);
+					statusProgress.appendChild(progressBarContainer);
+				}
+
+				uploadFile(fullFilePath, file, (percent) => {
+					if (statusProgress) {
+						const progressBar = statusProgress.querySelector('.cbi-progressbar div');
+						if (progressBar) {
+							progressBar.style.width = percent.toFixed(2) + '%';
+							statusProgress.querySelector('.cbi-progressbar').setAttribute('title', percent.toFixed(2) + '%');
+						}
 					}
-				}
-			}).then(() => {
-				if (statusProgress) {
-					statusProgress.innerHTML = '';
-				}
-				if (statusInfo) {
-					statusInfo.textContent = _('File "%s" uploaded successfully.').format(file.name);
-				}
-				popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(file.name)), 5000, 'info');
-				uploadedFiles++;
-				uploadNextFile(index + 1);
-			}).catch((err) => {
-				if (statusProgress) {
-					statusProgress.innerHTML = '';
-				}
-				if (statusInfo) {
-					statusInfo.textContent = _('Upload failed for file "%s": %s').format(file.name, err.message);
-				}
-				pop(null, E('p', _('Upload failed for file "%s": %s').format(file.name, err.message)), 'error');
-				uploadNextFile(index + 1);
-			});
-		}
-		uploadNextFile(0);
+				}).then(() => {
+					// Verify upload by checking actual file stat on router
+					return fs.stat(fullFilePath).then((stat) => {
+						if (!stat || stat.type !== 'file') {
+							throw new Error(_('Upload verification failed: file does not exist on server'));
+						}
+						if (stat.size !== file.size) {
+							const expectedStr = self.formatSizeString(file.size);
+							const gotStr = self.formatSizeString(stat.size);
+							throw new Error(_('Upload verification failed for "%s": expected %s, got %s').format(file.name, expectedStr, gotStr));
+						}
+						return stat;
+					});
+				}).then(() => {
+					if (statusProgress) {
+						statusProgress.innerHTML = '';
+					}
+					if (statusInfo) {
+						statusInfo.textContent = _('File "%s" uploaded successfully.').format(file.name);
+					}
+					popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(file.name)), 3000, 'info');
+					uploadedFiles++;
+					uploadNextFile(index + 1);
+				}).catch((err) => {
+					if (statusProgress) {
+						statusProgress.innerHTML = '';
+					}
+					if (statusInfo) {
+						statusInfo.textContent = _('Upload failed for file "%s": %s').format(file.name, err.message);
+					}
+					pop(null, E('p', _('Upload failed for file "%s": %s').format(file.name, err.message)), 'error');
+					uploadNextFile(index + 1);
+				});
+			}
+			uploadNextFile(0);
+		}).catch((err) => {
+			pop(null, E('p', _('Failed to check disk space: %s').format(err.message)), 'error');
+		});
 	},
 
 	// Handler for creating a directory
@@ -924,7 +1075,7 @@ return view.extend({
 					saveButton.disabled = true;
 				}
 			});
-			statusInfo.appendChild(E('span', {}, _('Create Directory: ')));
+			statusInfo.appendChild(E('span', {}, _('Create Directory:') + ' '));
 			statusInfo.appendChild(dirNameInput);
 			statusProgress.appendChild(saveButton);
 		}
@@ -940,7 +1091,7 @@ return view.extend({
 			if (res.code !== 0) {
 				return Promise.reject(new Error(res.stderr.trim()));
 			}
-			popTimeout(null, E('p', _('Directory "%s" created successfully.').format(trimmedDirName)), 5000, 'info');
+			popTimeout(null, E('p', _('Directory "%s" created successfully.').format(trimmedDirName)), 3000, 'info');
 			self.loadFileList(currentPath).then(() => {
 				
 			});
@@ -981,7 +1132,7 @@ return view.extend({
 					createButton.disabled = true;
 				}
 			});
-			statusInfo.appendChild(E('span', {}, _('Create File: ')));
+			statusInfo.appendChild(E('span', {}, _('Create File:') + ' '));
 			statusInfo.appendChild(fileNameInput);
 			statusProgress.appendChild(createButton);
 		}
@@ -997,7 +1148,7 @@ return view.extend({
 			if (res.code !== 0) {
 				return Promise.reject(new Error(res.stderr.trim()));
 			}
-			popTimeout(null, E('p', _('File "%s" created successfully.').format(trimmedFileName)), 5000, 'info');
+			popTimeout(null, E('p', _('File "%s" created successfully.').format(trimmedFileName)), 3000, 'info');
 			self.loadFileList(currentPath).then(() => {
 				
 			});
@@ -1083,7 +1234,7 @@ return view.extend({
 			}));
 		});
 		Promise.all(promises).then(() => {
-			popTimeout(null, E('p', _('Selected files and directories deleted successfully.')), 5000, 'info');
+			popTimeout(null, E('p', _('Selected files and directories deleted successfully.')), 3000, 'info');
 			selectedItems.clear();
 			self.updateDeleteSelectedButton();
 			self.loadFileList(currentPath).then(() => {
@@ -1154,7 +1305,7 @@ return view.extend({
 								E('a', {
 									href: '#',
 									click: () => self.handleDirectoryClick(parentPath)
-								}, '.. (Parent Directory)')
+								}, '.. (' + _('Parent Directory') + ')')
 							])
 						);
 						break;
@@ -1209,7 +1360,7 @@ return view.extend({
 
 				if (file.type === 'file') {
 					actions.push(E('button', {
-						class: 'btn cbi-button cbi-button-save',
+						class: 'btn cbi-button cbi-button-neutral',
 						title: _('Download'),
 						click: () => self.handleDownloadFile(fullPath)
 					}, _('Download')));
@@ -1219,19 +1370,19 @@ return view.extend({
 
 				if (!isRestricted) {
 					actions.push(E('button', {
-						class: 'btn cbi-button custom-rename-btn',
+						class: 'btn cbi-button cbi-button-action',
 						title: _('Rename/Properties'),
 						click: () => self.handleEditFile(fullPath, file)
 					}, _('Rename')));
 
 					actions.push(E('button', {
-						class: 'cbi-button cbi-button-action',
+						class: 'btn cbi-button cbi-button-neutral',
 						title: _('Duplicate'),
 						click: () => self.handleDuplicateFile(fullPath, file)
 					}, _('Copy')));
 
 					actions.push(E('button', {
-						class: 'cbi-button cbi-button-remove',
+						class: 'btn cbi-button cbi-button-remove',
 						title: _('Delete'),
 						click: () => self.handleDeleteFile(fullPath, file)
 					}, _('Delete')));
@@ -1527,7 +1678,7 @@ return view.extend({
 
 		if (confirm(_('Are you sure you want to delete this %s: "%s"?').format(itemTypeLabel, itemName))) {
 			fs.remove(filePath).then(() => {
-				popTimeout(null, E('p', _('Successfully deleted %s: "%s".').format(itemTypeLabel, itemName)), 5000, 'info');
+				popTimeout(null, E('p', _('Successfully deleted %s: "%s".').format(itemTypeLabel, itemName)), 3000, 'info');
 				self.loadFileList(currentPath).then(() => {
 					
 				});
@@ -1641,7 +1792,7 @@ return view.extend({
 				if (res.code !== 0) {
 					return Promise.reject(new Error(res.stderr.trim()));
 				}
-				popTimeout(null, E('p', _('Successfully duplicated %s "%s" as "%s".').format(_('item'), fileInfo.name, newName)), 5000, 'info');
+				popTimeout(null, E('p', _('Successfully duplicated %s "%s" as "%s".').format(_('item'), fileInfo.name, newName)), 3000, 'info');
 				self.loadFileList(currentPath).then(() => {
 					
 				});
@@ -1725,6 +1876,19 @@ return view.extend({
 				}
 			}
 		}).then(() => {
+			// Verify file exists on disk and matches blob size
+			return fs.stat(filePath).then((stat) => {
+				if (!stat || stat.type !== 'file') {
+					throw new Error(_('Upload verification failed: file does not exist on server'));
+				}
+				if (stat.size !== contentBlob.size) {
+					const expectedStr = self.formatSizeString(contentBlob.size);
+					const gotStr = self.formatSizeString(stat.size);
+					throw new Error(_('Upload verification failed for "%s": expected %s, got %s').format(fileName, expectedStr, gotStr));
+				}
+				return stat;
+			});
+		}).then(() => {
 			const permissions = self.originalFilePermissions;
 			if (permissions !== undefined) {
 				return fs.exec('chmod', [permissions, filePath]).then((res) => {
@@ -1735,7 +1899,7 @@ return view.extend({
 					if (statusInfo) {
 						statusInfo.textContent = _('File "%s" uploaded successfully.').format(fileName);
 					}
-					popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(fileName)), 5000, 'info');
+					popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(fileName)), 3000, 'info');
 					return self.loadFileList(currentPath).then(() => {
 						
 					});
@@ -1746,7 +1910,7 @@ return view.extend({
 				if (statusInfo) {
 					statusInfo.textContent = _('File "%s" uploaded successfully.').format(fileName);
 				}
-				popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(fileName)), 5000, 'info');
+				popTimeout(null, E('p', _('File "%s" uploaded successfully.').format(fileName)), 3000, 'info');
 				return self.loadFileList(currentPath).then(() => {
 					
 				});
@@ -1782,7 +1946,7 @@ return view.extend({
 		});
 		const statusInfo = document.getElementById('status-info');
 		if (statusInfo) {
-			statusInfo.textContent = _('Symlink: ') + linkPath + ' -> ' + targetPath;
+			statusInfo.textContent = _('Symlink:') + ' ' + linkPath + ' -> ' + targetPath;
 		}
 	},
 
@@ -1887,7 +2051,7 @@ return view.extend({
 			});
 		});
 		promise.then(() => {
-			popTimeout(null, E('p', _('Changes to %s "%s" uploaded successfully.').format(_('item'), newItemName)), 5000, 'info');
+			popTimeout(null, E('p', _('Changes to %s "%s" uploaded successfully.').format(_('item'), newItemName)), 3000, 'info');
 			self.loadFileList(currentPath).then(() => {
 				
 			});
@@ -2036,11 +2200,11 @@ return view.extend({
 		// Update status bar and message
 		const statusInfo = document.getElementById('status-info');
 		if (statusInfo) {
-			statusInfo.textContent = _('Editing: ') + filePath;
+			statusInfo.textContent = _('Editing:') + ' ' + filePath;
 		}
 		const editorMessage = document.getElementById('editor-message');
 		if (editorMessage) {
-			editorMessage.textContent = _('Editing: ') + filePath;
+			editorMessage.textContent = _('Editing:') + ' ' + filePath;
 		}
 
 		// Clear any progress messages
