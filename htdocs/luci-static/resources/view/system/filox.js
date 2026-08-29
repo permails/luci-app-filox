@@ -509,12 +509,56 @@ const cssContent = `
 return view.extend({
 	editorMode: 'text',
 	hexEditorInstance: null,
+
+	getInitialPath() {
+		let path = null;
+		try {
+			if (window.location.hash) {
+				let hash = decodeURIComponent(window.location.hash.replace(/^#\/?/, ''));
+				if (hash) {
+					path = hash.startsWith('/') ? hash : '/' + hash;
+				}
+			}
+			if (!path) {
+				path = sessionStorage.getItem('filox_current_path') || localStorage.getItem('filox_current_path');
+			}
+		} catch (e) {}
+		return path || config.currentDirectory || '/';
+	},
+
+	updatePathState(newPath) {
+		currentPath = newPath || '/';
+		try {
+			sessionStorage.setItem('filox_current_path', currentPath);
+			localStorage.setItem('filox_current_path', currentPath);
+			if (window.history && window.history.replaceState) {
+				window.history.replaceState(null, '', '#' + currentPath);
+			} else {
+				window.location.hash = currentPath;
+			}
+		} catch (e) {}
+		const pathInput = document.getElementById('path-input');
+		if (pathInput) {
+			pathInput.value = currentPath;
+		}
+	},
+
 	// Method called when the view is loaded
 	load() {
 		const self = this;
 		return loadConfig().then(() => {
-			currentPath = config.currentDirectory || '/';
-			return getFileList(currentPath); // Load the file list for the current directory
+			const targetPath = self.getInitialPath();
+			return fs.stat(targetPath).then((stat) => {
+				if (stat && stat.type === 'directory') {
+					self.updatePathState(targetPath);
+				} else {
+					self.updatePathState('/');
+				}
+			}).catch(() => {
+				self.updatePathState('/');
+			}).then(() => {
+				return getFileList(currentPath);
+			});
 		});
 	},
 
@@ -748,6 +792,23 @@ return view.extend({
 				}
 			}
 		});
+
+		// Listen to hash change for browser back/forward navigation
+		if (!self._hashBound) {
+			self._hashBound = true;
+			window.addEventListener('hashchange', () => {
+				const hashPath = self.getInitialPath();
+				if (hashPath !== currentPath) {
+					fs.stat(hashPath).then((stat) => {
+						if (stat && stat.type === 'directory') {
+							self.updatePathState(hashPath);
+							self.loadFileList(currentPath);
+						}
+					}).catch(() => {});
+				}
+			});
+		}
+
 		return viewContainer;
 	},
 
@@ -825,8 +886,7 @@ return view.extend({
 			const newPath = pathInput.value.trim() || '/';
 			fs.stat(newPath).then((stat) => {
 				if (stat.type === 'directory') {
-					currentPath = newPath;
-					pathInput.value = currentPath;
+					self.updatePathState(newPath);
 					self.loadFileList(currentPath).then(() => {
 						
 					});
@@ -1522,11 +1582,7 @@ return view.extend({
 	handleDirectoryClick(newPath) {
 		// Navigate to the selected directory and update the file list
 		const self = this;
-		currentPath = newPath || '/';
-		const pathInput = document.getElementById('path-input');
-		if (pathInput) {
-			pathInput.value = currentPath;
-		}
+		self.updatePathState(newPath || '/');
 		this.loadFileList(currentPath).then(() => {
 			
 		});
